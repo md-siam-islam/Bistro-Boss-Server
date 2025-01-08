@@ -37,7 +37,10 @@ async function run() {
     const cartCollection = client.db("Cartmenu").collection('cart')
     const userCollection = client.db("Usercollection").collection('user')
 
-
+app.get('/user',async(req,res)=>{
+  const result = await userCollection.find().toArray()
+  res.send(result)
+})
     app.post('/user',async(req,res) => {
         const user = req.body
 
@@ -48,6 +51,25 @@ async function run() {
         }
         const result = await userCollection.insertOne(user)
         res.send(result)
+    })
+
+    app.delete('/user/:id',async(req,res)=>{
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const result = await userCollection.deleteOne(query)
+      res.send(result)
+    })
+
+    app.patch('user/:id',async(req,res)=>{
+      const id = req.params.id
+      const query = {_id: new ObjectId(id)}
+      const updateDoc = {
+        $set:{
+          role:"admin"
+        }
+      }
+      const result = await userCollection.updateOne(query,updateDoc)
+      res.send(result)
     })
     app.get('/menu' ,async(req,res) => {
         
