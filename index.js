@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const jwt = require("jsonwebtoken");
+const stripe =require("stripe")(process.env.DB_STRIPE_SPK)
 const port = process.env.PORT || 5000;
 
 app.use(
@@ -41,6 +42,7 @@ async function run() {
 
     const cartCollection = client.db("Cartmenu").collection("cart");
     const userCollection = client.db("Usercollection").collection("user");
+    const paymentCollection = client.db("paymentCollection").collection("payment");
 
     const verefyToken = (req, res, next) => {
       console.log("Request Headers:", req.headers);
@@ -59,6 +61,32 @@ async function run() {
         next();
       });
     };
+    // payment gat function 
+    app.post('/create-payment-intent', async (req, res) => {
+      try {
+        const { price } = req.body; 
+        
+        if (!price || typeof price !== 'number') {
+          return res.status(400).send({ error: 'Invalid price value.' });
+        }
+    
+        const amount = Math.round(price * 100); 
+    
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ['card'],
+        });
+    
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      } catch (error) {
+        console.error("Error creating payment intent:", error.message);
+        res.status(500).send({ error: 'Failed to create payment intent' });
+      }
+    });
+    
 
     // token create start
     app.post("/jwt", async (req, res) => {
@@ -146,7 +174,12 @@ async function run() {
       const result = await menuCollection.insertOne(data)
       res.send(result)
     })
-    app.post
+    app.delete('/menu/:id',async(req,res)=> {
+      const id = req.params.id 
+      const query = {_id: new ObjectId(id)}
+      const result = await menuCollection.deleteOne(query)
+      res.send(result)
+    })
 
     app.get("/cart", async (req, res) => {
       const email = req.query.email;
@@ -163,6 +196,17 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
+    app.post('/payment', async(req,res) => {
+      const payment = req.body
+      console.log(payment);
+
+      const query = {_id: {
+        $in:payment.cardIds.map(id => new ObjectId(id))
+      }}
+      const deleteedId = await cartCollection.deleteMany(query)
+      const result = await paymentCollection.insertOne(payment)
+      res.send({result,deleteedId})
+    })
 
     app.post("/carts", async (req, res) => {
       const data = req.body;
