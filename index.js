@@ -207,6 +207,15 @@ async function run() {
       const result = await paymentCollection.insertOne(payment)
       res.send({result,deleteedId})
     })
+    app.get('/payment/:email',verefyToken,async(req,res) => {
+      const email = req.params.email
+      const query = {email: email}
+      // if(req.params.email!== req.decoded.email){
+      //   res.status(403).send({message:"forbenden access"})
+      // }
+      const result = await paymentCollection.find(query).toArray()
+      res.send(result)
+    })
 
     app.post("/carts", async (req, res) => {
       const data = req.body;
