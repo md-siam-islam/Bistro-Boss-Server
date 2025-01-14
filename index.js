@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const jwt = require("jsonwebtoken");
-const stripe =require("stripe")(process.env.DB_STRIPE_SPK)
+const stripe = require("stripe")(process.env.DB_STRIPE_SPK);
 const port = process.env.PORT || 5000;
 
 app.use(
@@ -39,10 +39,12 @@ async function run() {
 
     const dataBase = client.db("bistroBoss");
     const menuCollection = dataBase.collection("menu");
-
     const cartCollection = client.db("Cartmenu").collection("cart");
     const userCollection = client.db("Usercollection").collection("user");
-    const paymentCollection = client.db("paymentCollection").collection("payment");
+    const BistrobossReview = client.db("BistrobossReview").collection("review");
+    const paymentCollection = client
+      .db("paymentCollection")
+      .collection("payment");
 
     const verefyToken = (req, res, next) => {
       console.log("Request Headers:", req.headers);
@@ -61,32 +63,31 @@ async function run() {
         next();
       });
     };
-    // payment gat function 
-    app.post('/create-payment-intent', async (req, res) => {
+    // payment gat function
+    app.post("/create-payment-intent", async (req, res) => {
       try {
-        const { price } = req.body; 
-        
-        if (!price || typeof price !== 'number') {
-          return res.status(400).send({ error: 'Invalid price value.' });
+        const { price } = req.body;
+
+        if (!price || typeof price !== "number") {
+          return res.status(400).send({ error: "Invalid price value." });
         }
-    
-        const amount = Math.round(price * 100); 
-    
+
+        const amount = Math.round(price * 100);
+
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
           currency: "usd",
-          payment_method_types: ['card'],
+          payment_method_types: ["card"],
         });
-    
+
         res.send({
           clientSecret: paymentIntent.client_secret,
         });
       } catch (error) {
         console.error("Error creating payment intent:", error.message);
-        res.status(500).send({ error: 'Failed to create payment intent' });
+        res.status(500).send({ error: "Failed to create payment intent" });
       }
     });
-    
 
     // token create start
     app.post("/jwt", async (req, res) => {
@@ -96,7 +97,7 @@ async function run() {
     });
     // token create end
 
-    // verify admin 
+    // verify admin
     // const verfyAdmin = async(req,res,next)=>{
     //   const email = req.decoded.email
     //   const query = {email: email}
@@ -108,25 +109,31 @@ async function run() {
     //   next()
     // }
 
+    // admin cheack
+    app.get("/user/:email", verefyToken, async (req, res) => {
+      const email = req.params.email;
 
-// admin cheack
-    app.get('/user/:email',verefyToken,async(req,res) => {
-      const email = req.params.email
-
-      if(email !== req.decoded.email){
-        res.status(403).send({message:'Unauthorized access'})
+      if (email !== req.decoded.email) {
+        res.status(403).send({ message: "Unauthorized access" });
       }
-      const query = {email: email}
-      const user = await userCollection.findOne(query)
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
 
-      let admin = false
-      if(user){
-        admin = user.role === "admin"
+      let admin = false;
+      if (user) {
+        admin = user.role === "admin";
       }
-      res.send({admin})
-      
-    })
-   // admin cheack
+      res.send({ admin });
+    });
+    // admin cheack
+
+    app.get("/adminhome", verefyToken, async (req, res) => {
+      const users = await userCollection.estimatedDocumentCount();
+      const orders = await paymentCollection.estimatedDocumentCount();
+      const menus = await menuCollection.estimatedDocumentCount();
+
+      res.send({ users, orders, menus });
+    });
 
     app.get("/user", verefyToken, async (req, res) => {
       console.log("Headers received:", req.headers);
@@ -144,7 +151,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/user/:id",verefyToken, async (req, res) => {
+    app.delete("/user/:id", verefyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await userCollection.deleteOne(query);
@@ -163,23 +170,70 @@ async function run() {
       res.send(result);
     });
 
+    // payment history admin home get section
 
-    // 
+    // app.get("/payment-status", async (req, res) => {
+    //   try {
+    //     const result = await paymentCollection
+    //       .aggregate([
+    //         {
+    //           $unwind: "$menuIds",
+    //         },
+    //         {
+    //           $lookup: {
+    //             from: "menu",
+    //             localField: "menuIds",
+    //             foreignField: "_id",
+    //             as: "menuItems",
+    //           },
+    //         },
+    //         {
+    //           $unwind:'$menuItems'
+    //         },
+    //         {
+    //           $group:{
+    //             _id:"$menuItems.category",
+    //             quaintity:{$sum: 1},
+    //             totalRevenue:{ $sum : "$menuItems.price"}
+    //           }
+    //         }
+           
+    //       ])
+    //       .toArray();
+    //     res.send(result);
+    //   } catch (error) {
+    //     console.error("Error fetching payment status:", error);
+    //     res.status(500).send({ error: "Failed to fetch payment status" });
+    //   }
+    // });
+    
+    // payment history admin home get section end
+
+    //
+    app.get('/review',async(req,res) => {
+      const result = await BistrobossReview.find().toArray()
+      res.send(result)
+    })
+    app.post('/review',async(req,res) => {
+      const data = req.body
+      const result = await BistrobossReview.insertOne(data)
+      res.send(result)
+    })
     app.get("/menu", async (req, res) => {
       const result = await menuCollection.find().toArray();
       res.send(result);
     });
-    app.post('/menu',async(req,res)=>{
-      const data = req.body
-      const result = await menuCollection.insertOne(data)
-      res.send(result)
-    })
-    app.delete('/menu/:id',async(req,res)=> {
-      const id = req.params.id 
-      const query = {_id: new ObjectId(id)}
-      const result = await menuCollection.deleteOne(query)
-      res.send(result)
-    })
+    app.post("/menu", async (req, res) => {
+      const data = req.body;
+      const result = await menuCollection.insertOne(data);
+      res.send(result);
+    });
+    app.delete("/menu/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await menuCollection.deleteOne(query);
+      res.send(result);
+    });
 
     app.get("/cart", async (req, res) => {
       const email = req.query.email;
@@ -196,26 +250,28 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
-    app.post('/payment', async(req,res) => {
-      const payment = req.body
+    app.post("/payment", async (req, res) => {
+      const payment = req.body;
       console.log(payment);
 
-      const query = {_id: {
-        $in:payment.cardIds.map(id => new ObjectId(id))
-      }}
-      const deleteedId = await cartCollection.deleteMany(query)
-      const result = await paymentCollection.insertOne(payment)
-      res.send({result,deleteedId})
-    })
-    app.get('/payment/:email',verefyToken,async(req,res) => {
-      const email = req.params.email
-      const query = {email: email}
+      const query = {
+        _id: {
+          $in: payment.cardIds.map((id) => new ObjectId(id)),
+        },
+      };
+      const deleteedId = await cartCollection.deleteMany(query);
+      const result = await paymentCollection.insertOne(payment);
+      res.send({ result, deleteedId });
+    });
+    app.get("/payment/:email", verefyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
       // if(req.params.email!== req.decoded.email){
       //   res.status(403).send({message:"forbenden access"})
       // }
-      const result = await paymentCollection.find(query).toArray()
-      res.send(result)
-    })
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
 
     app.post("/carts", async (req, res) => {
       const data = req.body;
