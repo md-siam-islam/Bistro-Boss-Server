@@ -6,13 +6,7 @@ const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.DB_STRIPE_SPK);
 const port = process.env.PORT || 5000;
 
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors());
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -30,12 +24,12 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
 
     const dataBase = client.db("bistroBoss");
     const menuCollection = dataBase.collection("menu");
@@ -45,24 +39,25 @@ async function run() {
     const paymentCollection = client
       .db("paymentCollection")
       .collection("payment");
-
     const verefyToken = (req, res, next) => {
-      console.log("Request Headers:", req.headers);
-
-      if (!req.headers.authorization) {
-        return res.status(401).send({ message: "forbiden access" });
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res
+          .status(401)
+          .send({ message: "Unauthorized access: No token provided" });
       }
 
-      const token = req.headers.authorization.split(" ")[1];
-
+      const token = authHeader.split(" ")[1];
       jwt.verify(token, process.env.DB_TOKEN, (err, decoded) => {
         if (err) {
-          return res.status(401).send({ message: "forbiden access" });
+          console.error("Token verification failed:", err.message);
+          return res.status(403).send({ message: "Forbidden access" });
         }
         req.decoded = decoded;
         next();
       });
     };
+
     // payment gat function
     app.post("/create-payment-intent", async (req, res) => {
       try {
@@ -83,6 +78,7 @@ async function run() {
         res.send({
           clientSecret: paymentIntent.client_secret,
         });
+        
       } catch (error) {
         console.error("Error creating payment intent:", error.message);
         res.status(500).send({ error: "Failed to create payment intent" });
@@ -92,9 +88,13 @@ async function run() {
     // token create start
     app.post("/jwt", async (req, res) => {
       const user = req.body;
+      if (!user.email) {
+        return res.status(400).send({ message: "Email is required" });
+      }
       const token = jwt.sign(user, process.env.DB_TOKEN, { expiresIn: "5h" });
       res.send({ token });
-    });
+  });
+  
     // token create end
 
     // verify admin
@@ -197,7 +197,7 @@ async function run() {
     //             totalRevenue:{ $sum : "$menuItems.price"}
     //           }
     //         }
-           
+
     //       ])
     //       .toArray();
     //     res.send(result);
@@ -206,19 +206,19 @@ async function run() {
     //     res.status(500).send({ error: "Failed to fetch payment status" });
     //   }
     // });
-    
+
     // payment history admin home get section end
 
     //
-    app.get('/review',async(req,res) => {
-      const result = await BistrobossReview.find().toArray()
-      res.send(result)
-    })
-    app.post('/review',async(req,res) => {
-      const data = req.body
-      const result = await BistrobossReview.insertOne(data)
-      res.send(result)
-    })
+    app.get("/review", async (req, res) => {
+      const result = await BistrobossReview.find().toArray();
+      res.send(result);
+    });
+    app.post("/review", async (req, res) => {
+      const data = req.body;
+      const result = await BistrobossReview.insertOne(data);
+      res.send(result);
+    });
     app.get("/menu", async (req, res) => {
       const result = await menuCollection.find().toArray();
       res.send(result);
@@ -266,9 +266,9 @@ async function run() {
     app.get("/payment/:email", verefyToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
-      // if(req.params.email!== req.decoded.email){
-      //   res.status(403).send({message:"forbenden access"})
-      // }
+      if(req.params.email!== req.decoded.email){
+        res.status(403).send({message:"forbenden access"})
+      }
       const result = await paymentCollection.find(query).toArray();
       res.send(result);
     });
